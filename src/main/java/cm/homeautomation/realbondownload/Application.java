@@ -4,13 +4,14 @@ import java.math.BigDecimal;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Currency;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import javax.persistence.EntityManager;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -29,153 +30,164 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
+import cm.homeautomation.realbondownload.entities.Bon;
+import cm.homeautomation.realbondownload.entities.BonPosition;
+
 @SpringBootApplication
 @EnableScheduling
 public class Application {
 
-    public static void main(String[] args) {
-        SpringApplication.run(Application.class, args);
-    }
+	public static void main(String[] args) {
+		SpringApplication.run(Application.class, args);
+	}
 
-    @Bean
-    public CommandLineRunner commandLineRunner(ApplicationContext ctx) {
-        return args -> {
+	@Bean
+	public CommandLineRunner commandLineRunner(ApplicationContext ctx) {
+		return args -> {
 
-            // System.out.println("Let's inspect the beans provided by Spring Boot:");
+			EntityManager em = EntityManagerService.getNewManager();
+			em.getTransaction().begin();
 
-            /*
-             * String[] beanNames = ctx.getBeanDefinitionNames(); Arrays.sort(beanNames);
-             * for (String beanName : beanNames) { System.out.println(beanName); }
-             */
-            String url = "https://trxmail1.payback.de/go/9p5oiaqtiws90vwgv3xvrofx36obln035wrs4ck4o6wu/18?t_id=1241337351";
+			// System.out.println("Let's inspect the beans provided by Spring Boot:");
 
-            MultiValueMap<String, String> headers = new LinkedMultiValueMap<String, String>();
-            Map map = new HashMap<String, String>();
-            map.put("Content-Type", "application/json");
-            headers.setAll(map);
-            Map req_payload = new HashMap();
-            req_payload.put("name", "piyush");
+			/*
+			 * String[] beanNames = ctx.getBeanDefinitionNames(); Arrays.sort(beanNames);
+			 * for (String beanName : beanNames) { System.out.println(beanName); }
+			 */
+			String url = "https://trxmail1.payback.de/go/9p5oiaqtiws90vwgv3xvrofx36obln035wrs4ck4o6wu/18?t_id=1241337351";
 
-            HttpEntity<?> request = new HttpEntity<>(req_payload, headers);
+			MultiValueMap<String, String> headers = new LinkedMultiValueMap<String, String>();
+			Map map = new HashMap<String, String>();
+			map.put("Content-Type", "application/json");
+			headers.setAll(map);
+			Map req_payload = new HashMap();
+			req_payload.put("name", "piyush");
 
-            // Create a new RestTemplate instance
-            RestTemplate restTemplate = new RestTemplate();
+			HttpEntity<?> request = new HttpEntity<>(req_payload, headers);
 
-            // Add the String message converter
-            restTemplate.getMessageConverters().add(new StringHttpMessageConverter());
+			// Create a new RestTemplate instance
+			RestTemplate restTemplate = new RestTemplate();
 
-            ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
+			// Add the String message converter
+			restTemplate.getMessageConverters().add(new StringHttpMessageConverter());
 
-            String newLocation = response.getHeaders().get("Location").get(0);
+			ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
 
-            newLocation = newLocation.replace("https://www.payback.de/pb/ebon?t=", "").split("&")[0];
+			String newLocation = response.getHeaders().get("Location").get(0);
 
-            // System.out.println("new location: " + newLocation);
-            // System.out.println("===================================");
-            ResponseEntity<String> newResponse = restTemplate.postForEntity(newLocation, request, String.class);
+			newLocation = newLocation.replace("https://www.payback.de/pb/ebon?t=", "").split("&")[0];
 
-            // System.out.println(response);
-            // System.out.println("===================================");
-            // System.out.println(newResponse);
-            // System.out.println("===================================");
+			// System.out.println("new location: " + newLocation);
+			// System.out.println("===================================");
+			ResponseEntity<String> newResponse = restTemplate.postForEntity(newLocation, request, String.class);
 
-            String bonLocation1 = newResponse.getHeaders().get("Location").get(0);
+			// System.out.println(response);
+			// System.out.println("===================================");
+			// System.out.println(newResponse);
+			// System.out.println("===================================");
 
-            ResponseEntity<String> bonResponse1 = restTemplate.postForEntity(bonLocation1, request, String.class);
+			String bonLocation1 = newResponse.getHeaders().get("Location").get(0);
 
-            // System.out.println("BON RESPOONSE 1 ===================================");
-            // System.out.println(bonResponse1);
-            // System.out.println("===================================");
+			ResponseEntity<String> bonResponse1 = restTemplate.postForEntity(bonLocation1, request, String.class);
 
-            String bonLocation2 = urlFinder(bonResponse1.getBody().toString()).get(0).replaceAll("&amp;", "&")
-                    .replaceAll("%25253D", "=").replaceAll("%252526", "&").replaceAll("http://", "https://");
-            // System.out.println("BON URL 2 ===================================");
-            // System.out.println(bonLocation2);
+			// System.out.println("BON RESPOONSE 1 ===================================");
+			// System.out.println(bonResponse1);
+			// System.out.println("===================================");
 
-            ResponseEntity<String> bonResponse2 = restTemplate.postForEntity(bonLocation2, request, String.class);
+			String bonLocation2 = urlFinder(bonResponse1.getBody().toString()).get(0).replaceAll("&amp;", "&")
+					.replaceAll("%25253D", "=").replaceAll("%252526", "&").replaceAll("http://", "https://");
+			// System.out.println("BON URL 2 ===================================");
+			// System.out.println(bonLocation2);
 
-            // System.out.println("BON RESPOONSE 2 ===================================");
-            // System.out.println(bonResponse2.getBody().toString());
-            // System.out.println("===================================");
+			ResponseEntity<String> bonResponse2 = restTemplate.postForEntity(bonLocation2, request, String.class);
 
-            Document doc = Jsoup.parse(bonResponse2.getBody().toString());
+			// System.out.println("BON RESPOONSE 2 ===================================");
+			System.out.println(bonResponse2.getBody().toString());
+			// System.out.println("===================================");
 
-            Elements trs = doc.select("table.-striped").select("tbody").select("tr");
-            // System.out.println(trs.size());
-            List<BonPosition> bonPositionList = new ArrayList<>();
-            for (Element tr : trs) {
-                BonPosition bonPosition = new BonPosition();
+			Document doc = Jsoup.parse(bonResponse2.getBody().toString());
 
-                Elements tds = tr.select("td");
+			Elements trs = doc.select("table.-striped").select("tbody").select("tr");
+			// System.out.println(trs.size());
+			List<BonPosition> bonPositionList = new ArrayList<>();
+			for (Element tr : trs) {
+				BonPosition bonPosition = new BonPosition();
 
-                String name = tds.get(0).text().toString();
-                BigDecimal quantity = new BigDecimal(tds.get(1).text().toString());
-                // System.out.println("BigDecimal: "+tds.get(2).text().toString());
-                BigDecimal price = new BigDecimal(tds.get(2).text().toString().replace(",", "."));
+				Elements tds = tr.select("td");
 
-                System.out.println(name + " - " + quantity + " - " + price);
+				String name = tds.get(0).text().toString();
+				BigDecimal quantity = new BigDecimal(tds.get(1).text().toString());
+				// System.out.println("BigDecimal: "+tds.get(2).text().toString());
+				BigDecimal price = new BigDecimal(tds.get(2).text().toString().replace(",", "."));
 
-                bonPosition.setName(name);
-                bonPosition.setQuantity(quantity);
-                bonPosition.setPrice(price);
+				System.out.println(name + " - " + quantity + " - " + price);
 
-                bonPositionList.add(bonPosition);
-            }
+				bonPosition.setName(name);
+				bonPosition.setQuantity(quantity);
+				bonPosition.setPrice(price);
 
-            for (BonPosition bonPosition : bonPositionList) {
-                System.out.println(bonPosition);
-            }
+				bonPositionList.add(bonPosition);
+			}
 
-            // find meta data
+			Bon bon = new Bon();
 
-            String[] dateTime = doc.select("div.row").select("div.col-sm-6").select("h4").first().text().split(" ");
-            String pattern = "dd.MM.yyyy HH:mm:ss";
-            DateFormat df = new SimpleDateFormat(pattern);
+			for (BonPosition bonPosition : bonPositionList) {
+				System.out.println(bonPosition);
+			}
 
-            Date shoppingDate = df.parse(dateTime[3] + " " + dateTime[4]);
-            System.out.println(shoppingDate);
+			bon.setBonPositions(bonPositionList);
 
-/*
- <div class="col-sm-6">
-        <ul class="list -unstyled">
-            <li>
-                <h4>
-                    Summe (inkl. aller Rabatte):<span class="float-right">
-                    89,15 &euro;</span>
-                </h4>
-            </li>
-            
-            <li>
-                PAYBACK Punkte auf diesen Einkauf:
-                <span class="float-right">
-                    44 °P
-                </span>
-            </li>
-            <li>
-                PAYBACK Sonderpunkte:
-                <span class="float-right">
-                    0 °P
-                </span>
-            </li>
-        </ul>
+			// find meta data
 
-*/
+			String[] dateTime = doc.select("div.row").select("div.col-sm-6").select("h4").first().text().split(" ");
+			String pattern = "dd.MM.yyyy HH:mm:ss";
+			DateFormat df = new SimpleDateFormat(pattern);
 
-            // System.out.println("done parsing");
-        };
-    }
+			Date shoppingDate = df.parse(dateTime[3] + " " + dateTime[4]);
+			System.out.println(shoppingDate);
 
-    public List<String> urlFinder(String text) {
-        List<String> containedUrls = new ArrayList<String>();
-        String urlRegex = "((https?|ftp|gopher|telnet|file):((//)|(\\\\))+[\\w\\d:#@%/;$()~_?\\+-=\\\\\\.&]*)";
-        Pattern pattern = Pattern.compile(urlRegex, Pattern.CASE_INSENSITIVE);
-        Matcher urlMatcher = pattern.matcher(text);
+			String price = doc.select("div.row").select("ul").select("li").select("span.float-right").first().text().trim().split(" ")[0].replace(",", ".");
 
-        while (urlMatcher.find()) {
-            containedUrls.add(text.substring(urlMatcher.start(0), urlMatcher.end(0)));
-        }
+			String payback = doc.select("div.row").select("ul").select("li").select("span.float-right").get(1).text().trim().split(" ")[0].replace(",", ".");
+			String paybackExtra = doc.select("div.row").select("ul").select("li").select("span.float-right").get(2).text().trim().split(" ")[0].replace(",", ".");
 
-        return containedUrls;
-    }
+			
+			
+			System.out.println(price);
+
+			bon.setBonDate(shoppingDate);
+			bon.setPayback(new BigDecimal(payback));
+			bon.setPaybackExtra(new BigDecimal(paybackExtra));
+			bon.setPrice(new BigDecimal(price));
+
+			em.persist(bon);
+			em.getTransaction().commit();
+
+			/*
+			 * <div class="col-sm-6"> <ul class="list -unstyled"> <li> <h4> Summe (inkl.
+			 * aller Rabatte):<span class="float-right"> 89,15 &euro;</span> </h4> </li>
+			 * 
+			 * <li> PAYBACK Punkte auf diesen Einkauf: <span class="float-right"> 44 °P
+			 * </span> </li> <li> PAYBACK Sonderpunkte: <span class="float-right"> 0 °P
+			 * </span> </li> </ul>
+			 * 
+			 */
+
+			// System.out.println("done parsing");
+		};
+	}
+
+	public List<String> urlFinder(String text) {
+		List<String> containedUrls = new ArrayList<String>();
+		String urlRegex = "((https?|ftp|gopher|telnet|file):((//)|(\\\\))+[\\w\\d:#@%/;$()~_?\\+-=\\\\\\.&]*)";
+		Pattern pattern = Pattern.compile(urlRegex, Pattern.CASE_INSENSITIVE);
+		Matcher urlMatcher = pattern.matcher(text);
+
+		while (urlMatcher.find()) {
+			containedUrls.add(text.substring(urlMatcher.start(0), urlMatcher.end(0)));
+		}
+
+		return containedUrls;
+	}
 
 }
