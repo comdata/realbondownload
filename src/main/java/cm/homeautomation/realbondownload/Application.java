@@ -74,6 +74,9 @@ public class Application {
 
             EntityManager em = EntityManagerService.getNewManager();
 
+            Date currentDate= new Date();
+            Date latestReceivedDate = new Date(currentDate.getTime()- 14*86400*1000);
+
             Message[] messages = inbox.getMessages();
             System.out.println("------------------------------");
             for (int i = 1; i < 100; i++) {
@@ -81,28 +84,31 @@ public class Application {
                 String messageFrom = message.getFrom()[0].toString();
                 String messageSubject = message.getSubject();
                 String messageId = message.getHeader("Message-ID")[0];
+                Date messageReceived = message.getReceivedDate();
 
-                if ("PAYBACK Service <service@payback.de>".equals(messageFrom)
-                        && "Ihr neuer Punktestand!".equals(messageSubject)) {
+                if (messageReceived.compareTo(latestReceivedDate)> 0) {
 
-                    List<Bon> bonList = em
-                            .createQuery("select b from Bon b where b.messageId=:messageId", Bon.class)
-                            .setParameter("messageId", messageId).getResultList();
+                    if ("PAYBACK Service <service@payback.de>".equals(messageFrom)
+                            && "Ihr neuer Punktestand!".equals(messageSubject)) {
 
-                    System.out.println("Mail : " + messageFrom + "- " + messageSubject+ " - "+messageId);
+                        List<Bon> bonList = em.createQuery("select b from Bon b where b.messageId=:messageId", Bon.class)
+                                .setParameter("messageId", messageId).getResultList();
 
-                    if (bonList == null || bonList.isEmpty()) {
+                        System.out.println("Mail : " + messageFrom + "- " + messageSubject + " - " + messageId);
 
-                        List<String> urls = urlFilterFinder(getTextFromMessage(message));
-                        System.out.println(urls);
-                        System.out.println(urls.get(2));
+                        if (bonList == null || bonList.isEmpty()) {
 
-                        try {
-                            fetchBon(urls.get(2), messageId);
-                        } catch (Exception e) {
-                            System.out.println("not storing");
+                            List<String> urls = urlFilterFinder(getTextFromMessage(message));
+                            System.out.println(urls);
+                            System.out.println(urls.get(2));
+
+                            try {
+                                fetchBon(urls.get(2), messageId);
+                            } catch (Exception e) {
+                                System.out.println("not storing");
+                            }
+
                         }
-
                     }
                 }
             }
@@ -172,8 +178,6 @@ public class Application {
             mailServer = args[0];
             mailAddress = args[1];
             mailPassword = args[2];
-
-           
 
             // System.out.println("done parsing");
         };
@@ -297,7 +301,6 @@ public class Application {
         bon.setPaybackExtra(new BigDecimal(paybackExtra));
         bon.setPrice(new BigDecimal(price));
         bon.setMessageId(messageId);
-
 
         em.persist(bon);
         em.getTransaction().commit();
