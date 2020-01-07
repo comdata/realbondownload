@@ -49,6 +49,10 @@ import cm.homeautomation.realbondownload.entities.BonPosition;
 @EnableScheduling
 public class Application {
 
+    private static String mailServer;
+    private static String mailAddress;
+    private static String mailPassword;
+
     public static void main(String[] args) {
         SpringApplication.run(Application.class, args);
     }
@@ -68,22 +72,38 @@ public class Application {
 
             System.out.println("Total Messages:- " + messageCount);
 
+            EntityManager em = EntityManagerService.getNewManager();
+
             Message[] messages = inbox.getMessages();
             System.out.println("------------------------------");
             for (int i = 1; i < 100; i++) {
                 Message message = messages[messages.length - i];
                 String messageFrom = message.getFrom()[0].toString();
                 String messageSubject = message.getSubject();
+                String messageId = message.getHeader("Message-ID")[0];
 
                 if ("PAYBACK Service <service@payback.de>".equals(messageFrom)
                         && "Ihr neuer Punktestand!".equals(messageSubject)) {
 
-                    System.out.println("Mail : " + messageFrom + "- " + messageSubject);
-                    List<String> urls = urlFinder(getTextFromMessage(message));
-                    System.out.println(urls);
-                    System.out.println(urls.get(0));
+                    List<Bon> bonList = em
+                            .createQuery("select b from Bon b where b.messageId=:messageId", Bon.class)
+                            .setParameter("messageId", messageId).getResultList();
 
-                    fetchBon(urls.get(0));
+                    System.out.println("Mail : " + messageFrom + "- " + messageSubject+ " - "+messageId);
+
+                    if (bonList == null || bonList.isEmpty()) {
+
+                        List<String> urls = urlFilterFinder(getTextFromMessage(message));
+                        System.out.println(urls);
+                        System.out.println(urls.get(2));
+
+                        try {
+                            fetchBon(urls.get(2), messageId);
+                        } catch (Exception e) {
+                            System.out.println("not storing");
+                        }
+
+                    }
                 }
             }
             inbox.close(true);
@@ -92,6 +112,21 @@ public class Application {
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    public List<String> urlFilterFinder(String message) {
+        List<String> urls = urlFinder(message);
+        List<String> filteredUrls = new ArrayList<>();
+
+        for (String url : urls) {
+
+            if (url.startsWith("https://trxmail1.payback.de/go")) {
+                // System.out.println("-- "+url+" --");
+
+                filteredUrls.add(url);
+            }
+        }
+        return filteredUrls;
 
     }
 
@@ -99,13 +134,18 @@ public class Application {
         String result = "";
         int count = mimeMultipart.getCount();
         for (int i = 0; i < count; i++) {
+            System.out.println("part: " + i);
             BodyPart bodyPart = mimeMultipart.getBodyPart(i);
             if (bodyPart.isMimeType("text/plain")) {
+                // System.out.println("part: "+bodyPart.getContent());
                 result = result + "\n" + bodyPart.getContent();
-                break; // without break same text appears twice in my tests
+                // break; // without break same text appears twice in my tests
             } else if (bodyPart.isMimeType("text/html")) {
                 String html = (String) bodyPart.getContent();
-                result = result + "\n" + org.jsoup.Jsoup.parse(html).text();
+                // System.out.println("part: "+html);
+                String plainHtml = org.jsoup.Jsoup.parse(html).text();
+                // System.out.println(plainHtml);
+                result = result + "\n" + html;
             } else if (bodyPart.getContent() instanceof MimeMultipart) {
                 result = result + getTextFromMimeMultipart((MimeMultipart) bodyPart.getContent());
             }
@@ -121,6 +161,7 @@ public class Application {
             MimeMultipart mimeMultipart = (MimeMultipart) message.getContent();
             result = getTextFromMimeMultipart(mimeMultipart);
         }
+        // System.out.println("part: "+result);
         return result;
     }
 
@@ -128,30 +169,28 @@ public class Application {
     public CommandLineRunner commandLineRunner(ApplicationContext ctx) {
         return args -> {
 
-            String mailServer = args[0];
-            String mailAddress = args[1];
-            String mailPassword = args[2];
+            mailServer = args[0];
+            mailAddress = args[1];
+            mailPassword = args[2];
 
-            boolean fetchBon = false;
-
-            readMails(mailServer, mailAddress, mailPassword);
+           
 
             // System.out.println("done parsing");
         };
     }
 
-    private void fetchBon(String bonInitialUrl) throws ParseException {
+    public void checkMails() {
+        readMails(mailServer, mailAddress, mailPassword);
+    }
+
+    private void fetchBon(String bonInitialUrl, String messageId) throws ParseException {
 
         EntityManager em = EntityManagerService.getNewManager();
         em.getTransaction().begin();
 
-        // System.out.println("Let's inspect the beans provided by Spring Boot:");
-
-        /*
-         * String[] beanNames = ctx.getBeanDefinitionNames(); Arrays.sort(beanNames);
-         * for (String beanName : beanNames) { System.out.println(beanName); }
-         */
         String url = bonInitialUrl;
+
+        System.out.println(url);
 
         MultiValueMap<String, String> headers = new LinkedMultiValueMap<String, String>();
         Map map = new HashMap<String, String>();
@@ -257,6 +296,8 @@ public class Application {
         bon.setPayback(new BigDecimal(payback));
         bon.setPaybackExtra(new BigDecimal(paybackExtra));
         bon.setPrice(new BigDecimal(price));
+        bon.setMessageId(messageId);
+
 
         em.persist(bon);
         em.getTransaction().commit();
