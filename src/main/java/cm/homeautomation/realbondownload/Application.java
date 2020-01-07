@@ -14,8 +14,14 @@ import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import javax.mail.BodyPart;
+import javax.mail.Folder;
+import javax.mail.Message;
+import javax.mail.MessagingException;
+import javax.mail.Session;
+import javax.mail.Store;
+import javax.mail.internet.MimeMultipart;
 import javax.persistence.EntityManager;
-import javax.validation.constraints.Pattern.Flag;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -34,286 +40,279 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
-import javax.mail.BodyPart;
-import javax.mail.Folder;
-import javax.mail.Message;
-import javax.mail.MessagingException;
-import javax.mail.Session;
-import javax.mail.Store;
-import javax.mail.internet.MimeMultipart;
-
 import cm.homeautomation.realbondownload.entities.Bon;
 import cm.homeautomation.realbondownload.entities.BonPosition;
+import lombok.extern.log4j.Log4j2;
 
+@Log4j2
 @SpringBootApplication
 @EnableScheduling
 public class Application {
 
-    private static String mailServer;
-    private static String mailAddress;
-    private static String mailPassword;
+	private static String mailServer;
+	private static String mailAddress;
+	private static String mailPassword;
 
-    public static void main(String[] args) {
-        SpringApplication.run(Application.class, args);
-    }
+	public static void main(String[] args) {
+		SpringApplication.run(Application.class, args);
+	}
 
-    /**
-     * read mails from server
-     * 
-     */
-    public void readMails(String mailServer, String mailAddress, String password) {
-        Properties props = new Properties();
-        try {
-            Session session = Session.getDefaultInstance(props, null);
+	/**
+	 * read mails from server
+	 * 
+	 */
+	public void readMails(String mailServer, String mailAddress, String password) {
+		Properties props = new Properties();
+		try {
+			Session session = Session.getDefaultInstance(props, null);
 
-            Store store = session.getStore("imaps");
-            store.connect(mailServer, mailAddress, password);
+			Store store = session.getStore("imaps");
+			store.connect(mailServer, mailAddress, password);
 
-            Folder inbox = store.getFolder("inbox");
-            inbox.open(Folder.READ_ONLY);
-            int messageCount = inbox.getMessageCount();
+			Folder inbox = store.getFolder("inbox");
+			inbox.open(Folder.READ_ONLY);
 
-            System.out.println("Total Messages:- " + messageCount);
+			EntityManager em = EntityManagerService.getNewManager();
 
-            EntityManager em = EntityManagerService.getNewManager();
+			Date currentDate = new Date();
+			Date latestReceivedDate = new Date(currentDate.getTime() - 14 * 86400 * 1000);
 
-            Date currentDate= new Date();
-            Date latestReceivedDate = new Date(currentDate.getTime()- 14*86400*1000);
+			Message[] messages = inbox.getMessages();
+			// read only the latest 100 messages
+			for (int i = 1; i < 100; i++) {
+				Message message = messages[messages.length - i];
+				String messageFrom = message.getFrom()[0].toString();
+				String messageSubject = message.getSubject();
+				String messageId = message.getHeader("Message-ID")[0];
+				Date messageReceived = message.getReceivedDate();
 
-            Message[] messages = inbox.getMessages();
-            for (int i = 1; i < 100; i++) {
-                Message message = messages[messages.length - i];
-                String messageFrom = message.getFrom()[0].toString();
-                String messageSubject = message.getSubject();
-                String messageId = message.getHeader("Message-ID")[0];
-                Date messageReceived = message.getReceivedDate();
+				// you can't download bons older 14 days
+				if (messageReceived.compareTo(latestReceivedDate) > 0) {
 
-                if (messageReceived.compareTo(latestReceivedDate)> 0) {
+					if ("PAYBACK Service <service@payback.de>".equals(messageFrom)
+							&& "Ihr neuer Punktestand!".equals(messageSubject)) {
 
-                    if ("PAYBACK Service <service@payback.de>".equals(messageFrom)
-                            && "Ihr neuer Punktestand!".equals(messageSubject)) {
+						// check if we have seen the message id already
+						List<Bon> bonList = em
+								.createQuery("select b from Bon b where b.messageId=:messageId", Bon.class)
+								.setParameter("messageId", messageId).getResultList();
 
-                        List<Bon> bonList = em.createQuery("select b from Bon b where b.messageId=:messageId", Bon.class)
-                                .setParameter("messageId", messageId).getResultList();
+						if (bonList == null || bonList.isEmpty()) {
 
-                        //System.out.println("Mail : " + messageFrom + "- " + messageSubject + " - " + messageId);
+							List<String> urls = urlFilterFinder(getTextFromMessage(message));
+							System.out.println(urls);
+							System.out.println(urls.get(2));
 
-                        if (bonList == null || bonList.isEmpty()) {
+							try {
+								fetchBon(urls.get(2), messageId);
+							} catch (Exception e) {
+								log.error(e);
+							}
 
-                            List<String> urls = urlFilterFinder(getTextFromMessage(message));
-                            System.out.println(urls);
-                            System.out.println(urls.get(2));
+						}
+					}
+				}
+			}
+			inbox.close(true);
+			store.close();
 
-                            try {
-                                fetchBon(urls.get(2), messageId);
-                            } catch (Exception e) {
-                                System.out.println("not storing");
-                            }
+		} catch (Exception e) {
+			log.error(e);
+		}
+	}
 
-                        }
-                    }
-                }
-            }
-            inbox.close(true);
-            store.close();
+	/**
+	 * filter relevant URLs
+	 * 
+	 */
+	public List<String> urlFilterFinder(String message) {
+		List<String> urls = urlFinder(message);
+		List<String> filteredUrls = new ArrayList<>();
 
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
+		for (String url : urls) {
 
-    /**
-     * filter relevant URLs
-     * 
-     */
-    public List<String> urlFilterFinder(String message) {
-        List<String> urls = urlFinder(message);
-        List<String> filteredUrls = new ArrayList<>();
+			if (url.startsWith("https://trxmail1.payback.de/go")) {
+				filteredUrls.add(url);
+			}
+		}
+		return filteredUrls;
 
-        for (String url : urls) {
+	}
 
-            if (url.startsWith("https://trxmail1.payback.de/go")) {
-                filteredUrls.add(url);
-            }
-        }
-        return filteredUrls;
+	/**
+	 * 
+	 */
+	private String getTextFromMimeMultipart(MimeMultipart mimeMultipart) throws MessagingException, IOException {
+		String result = "";
+		int count = mimeMultipart.getCount();
+		for (int i = 0; i < count; i++) {
+			System.out.println("part: " + i);
+			BodyPart bodyPart = mimeMultipart.getBodyPart(i);
+			if (bodyPart.isMimeType("text/plain")) {
+				result = result + "\n" + bodyPart.getContent();
+			} else if (bodyPart.isMimeType("text/html")) {
+				String html = (String) bodyPart.getContent();
+				String plainHtml = org.jsoup.Jsoup.parse(html).text();
+				result = result + "\n" + html;
+			} else if (bodyPart.getContent() instanceof MimeMultipart) {
+				result = result + getTextFromMimeMultipart((MimeMultipart) bodyPart.getContent());
+			}
+		}
+		return result;
+	}
 
-    }
+	/**
+	 * 
+	 */
+	private String getTextFromMessage(Message message) throws MessagingException, IOException {
+		String result = "";
+		if (message.isMimeType("text/plain")) {
+			result = message.getContent().toString();
+		} else if (message.isMimeType("multipart/*")) {
+			MimeMultipart mimeMultipart = (MimeMultipart) message.getContent();
+			result = getTextFromMimeMultipart(mimeMultipart);
+		}
+		return result;
+	}
 
-    /**
-     * 
-     */
-    private String getTextFromMimeMultipart(MimeMultipart mimeMultipart) throws MessagingException, IOException {
-        String result = "";
-        int count = mimeMultipart.getCount();
-        for (int i = 0; i < count; i++) {
-            System.out.println("part: " + i);
-            BodyPart bodyPart = mimeMultipart.getBodyPart(i);
-            if (bodyPart.isMimeType("text/plain")) {
-                result = result + "\n" + bodyPart.getContent();
-            } else if (bodyPart.isMimeType("text/html")) {
-                String html = (String) bodyPart.getContent();
-                String plainHtml = org.jsoup.Jsoup.parse(html).text();
-                result = result + "\n" + html;
-            } else if (bodyPart.getContent() instanceof MimeMultipart) {
-                result = result + getTextFromMimeMultipart((MimeMultipart) bodyPart.getContent());
-            }
-        }
-        return result;
-    }
+	/**
+	 * entry point for application
+	 */
+	@Bean
+	public CommandLineRunner commandLineRunner(ApplicationContext ctx) {
+		return args -> {
+			mailServer = args[0];
+			mailAddress = args[1];
+			mailPassword = args[2];
+		};
+	}
 
-    /**
-     * 
-     */
-    private String getTextFromMessage(Message message) throws MessagingException, IOException {
-        String result = "";
-        if (message.isMimeType("text/plain")) {
-            result = message.getContent().toString();
-        } else if (message.isMimeType("multipart/*")) {
-            MimeMultipart mimeMultipart = (MimeMultipart) message.getContent();
-            result = getTextFromMimeMultipart(mimeMultipart);
-        }
-        return result;
-    }
+	/**
+	 * external check call entry point
+	 * 
+	 */
+	public void checkMails() {
+		readMails(mailServer, mailAddress, mailPassword);
+	}
 
-    /**
-     * entry point for application
-     */
-    @Bean
-    public CommandLineRunner commandLineRunner(ApplicationContext ctx) {
-        return args -> {
-            mailServer = args[0];
-            mailAddress = args[1];
-            mailPassword = args[2];
-        };
-    }
+	/**
+	 * fetch BON for single mail entry
+	 * 
+	 */
+	private void fetchBon(String bonInitialUrl, String messageId) throws ParseException {
 
-    /**
-     * external check call entry point
-     * 
-     */
-    public void checkMails() {
-        readMails(mailServer, mailAddress, mailPassword);
-    }
+		EntityManager em = EntityManagerService.getNewManager();
+		em.getTransaction().begin();
 
-    /**
-     * fetch BON for single mail entry
-     * 
-     */
-    private void fetchBon(String bonInitialUrl, String messageId) throws ParseException {
+		String url = bonInitialUrl;
 
-        EntityManager em = EntityManagerService.getNewManager();
-        em.getTransaction().begin();
+		MultiValueMap<String, String> headers = new LinkedMultiValueMap<String, String>();
+		Map<String, String> map = new HashMap<>();
+		map.put("Content-Type", "application/json");
+		headers.setAll(map);
+		Map<String, String> req_payload = new HashMap<>();
+		req_payload.put("name", "piyush");
 
-        String url = bonInitialUrl;
+		HttpEntity<?> request = new HttpEntity<>(req_payload, headers);
 
-        MultiValueMap<String, String> headers = new LinkedMultiValueMap<String, String>();
-        Map map = new HashMap<String, String>();
-        map.put("Content-Type", "application/json");
-        headers.setAll(map);
-        Map req_payload = new HashMap();
-        req_payload.put("name", "piyush");
+		// Create a new RestTemplate instance
+		RestTemplate restTemplate = new RestTemplate();
 
-        HttpEntity<?> request = new HttpEntity<>(req_payload, headers);
+		// Add the String message converter
+		restTemplate.getMessageConverters().add(new StringHttpMessageConverter());
 
-        // Create a new RestTemplate instance
-        RestTemplate restTemplate = new RestTemplate();
+		ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
 
-        // Add the String message converter
-        restTemplate.getMessageConverters().add(new StringHttpMessageConverter());
+		String newLocation = response.getHeaders().get("Location").get(0);
 
-        ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
+		newLocation = newLocation.replace("https://www.payback.de/pb/ebon?t=", "").split("&")[0];
 
-        String newLocation = response.getHeaders().get("Location").get(0);
+		ResponseEntity<String> newResponse = restTemplate.postForEntity(newLocation, request, String.class);
 
-        newLocation = newLocation.replace("https://www.payback.de/pb/ebon?t=", "").split("&")[0];
+		String bonLocation1 = newResponse.getHeaders().get("Location").get(0);
 
-        ResponseEntity<String> newResponse = restTemplate.postForEntity(newLocation, request, String.class);
+		ResponseEntity<String> bonResponse1 = restTemplate.postForEntity(bonLocation1, request, String.class);
 
-        String bonLocation1 = newResponse.getHeaders().get("Location").get(0);
+		String bonLocation2 = urlFinder(bonResponse1.getBody().toString()).get(0).replaceAll("&amp;", "&")
+				.replaceAll("%25253D", "=").replaceAll("%252526", "&").replaceAll("http://", "https://");
 
-        ResponseEntity<String> bonResponse1 = restTemplate.postForEntity(bonLocation1, request, String.class);
+		ResponseEntity<String> bonResponse2 = restTemplate.postForEntity(bonLocation2, request, String.class);
 
-        String bonLocation2 = urlFinder(bonResponse1.getBody().toString()).get(0).replaceAll("&amp;", "&")
-                .replaceAll("%25253D", "=").replaceAll("%252526", "&").replaceAll("http://", "https://");
+		System.out.println(bonResponse2.getBody().toString());
 
-        ResponseEntity<String> bonResponse2 = restTemplate.postForEntity(bonLocation2, request, String.class);
+		Document doc = Jsoup.parse(bonResponse2.getBody().toString());
 
-        System.out.println(bonResponse2.getBody().toString());
+		Elements trs = doc.select("table.-striped").select("tbody").select("tr");
 
-        Document doc = Jsoup.parse(bonResponse2.getBody().toString());
+		List<BonPosition> bonPositionList = new ArrayList<>();
+		for (Element tr : trs) {
+			BonPosition bonPosition = new BonPosition();
 
-        Elements trs = doc.select("table.-striped").select("tbody").select("tr");
+			Elements tds = tr.select("td");
 
-        List<BonPosition> bonPositionList = new ArrayList<>();
-        for (Element tr : trs) {
-            BonPosition bonPosition = new BonPosition();
+			String name = tds.get(0).text().toString();
+			BigDecimal quantity = new BigDecimal(tds.get(1).text().toString());
+			BigDecimal price = new BigDecimal(tds.get(2).text().toString().replace(",", "."));
 
-            Elements tds = tr.select("td");
+			System.out.println(name + " - " + quantity + " - " + price);
 
-            String name = tds.get(0).text().toString();
-            BigDecimal quantity = new BigDecimal(tds.get(1).text().toString());
-            BigDecimal price = new BigDecimal(tds.get(2).text().toString().replace(",", "."));
+			bonPosition.setName(name);
+			bonPosition.setQuantity(quantity);
+			bonPosition.setPrice(price);
 
-            System.out.println(name + " - " + quantity + " - " + price);
+			bonPositionList.add(bonPosition);
+		}
 
-            bonPosition.setName(name);
-            bonPosition.setQuantity(quantity);
-            bonPosition.setPrice(price);
+		Bon bon = new Bon();
 
-            bonPositionList.add(bonPosition);
-        }
+		for (BonPosition bonPosition : bonPositionList) {
+			log.debug(bonPosition);
+		}
 
-        Bon bon = new Bon();
+		bon.setBonPositions(bonPositionList);
 
-        for (BonPosition bonPosition : bonPositionList) {
-            System.out.println(bonPosition);
-        }
+		// find meta data
 
-        bon.setBonPositions(bonPositionList);
+		String[] dateTime = doc.select("div.row").select("div.col-sm-6").select("h4").first().text().split(" ");
+		String pattern = "dd.MM.yyyy HH:mm:ss";
+		DateFormat df = new SimpleDateFormat(pattern);
 
-        // find meta data
+		Date shoppingDate = df.parse(dateTime[3] + " " + dateTime[4]);
+		log.debug("Shopping date: "+shoppingDate);
 
-        String[] dateTime = doc.select("div.row").select("div.col-sm-6").select("h4").first().text().split(" ");
-        String pattern = "dd.MM.yyyy HH:mm:ss";
-        DateFormat df = new SimpleDateFormat(pattern);
+		String price = doc.select("div.row").select("ul").select("li").select("span.float-right").first().text().trim()
+				.split(" ")[0].replace(",", ".");
 
-        Date shoppingDate = df.parse(dateTime[3] + " " + dateTime[4]);
-        System.out.println(shoppingDate);
+		String payback = doc.select("div.row").select("ul").select("li").select("span.float-right").get(1).text().trim()
+				.split(" ")[0].replace(",", ".");
+		String paybackExtra = doc.select("div.row").select("ul").select("li").select("span.float-right").get(2).text()
+				.trim().split(" ")[0].replace(",", ".");
 
-        String price = doc.select("div.row").select("ul").select("li").select("span.float-right").first().text().trim()
-                .split(" ")[0].replace(",", ".");
+		log.debug("price: "+price);
 
-        String payback = doc.select("div.row").select("ul").select("li").select("span.float-right").get(1).text().trim()
-                .split(" ")[0].replace(",", ".");
-        String paybackExtra = doc.select("div.row").select("ul").select("li").select("span.float-right").get(2).text()
-                .trim().split(" ")[0].replace(",", ".");
+		bon.setBonDate(shoppingDate);
+		bon.setPayback(new BigDecimal(payback));
+		bon.setPaybackExtra(new BigDecimal(paybackExtra));
+		bon.setPrice(new BigDecimal(price));
+		bon.setMessageId(messageId);
 
-        System.out.println(price);
+		em.persist(bon);
+		em.getTransaction().commit();
+	}
 
-        bon.setBonDate(shoppingDate);
-        bon.setPayback(new BigDecimal(payback));
-        bon.setPaybackExtra(new BigDecimal(paybackExtra));
-        bon.setPrice(new BigDecimal(price));
-        bon.setMessageId(messageId);
+	/**
+	 * find URLs
+	 */
+	public List<String> urlFinder(String text) {
+		List<String> containedUrls = new ArrayList<String>();
+		String urlRegex = "((https?|ftp|gopher|telnet|file):((//)|(\\\\))+[\\w\\d:#@%/;$()~_?\\+-=\\\\\\.&]*)";
+		Pattern pattern = Pattern.compile(urlRegex, Pattern.CASE_INSENSITIVE);
+		Matcher urlMatcher = pattern.matcher(text);
 
-        em.persist(bon);
-        em.getTransaction().commit();
-    }
+		while (urlMatcher.find()) {
+			containedUrls.add(text.substring(urlMatcher.start(0), urlMatcher.end(0)));
+		}
 
-    /**
-     * find URLs
-     */
-    public List<String> urlFinder(String text) {
-        List<String> containedUrls = new ArrayList<String>();
-        String urlRegex = "((https?|ftp|gopher|telnet|file):((//)|(\\\\))+[\\w\\d:#@%/;$()~_?\\+-=\\\\\\.&]*)";
-        Pattern pattern = Pattern.compile(urlRegex, Pattern.CASE_INSENSITIVE);
-        Matcher urlMatcher = pattern.matcher(text);
-
-        while (urlMatcher.find()) {
-            containedUrls.add(text.substring(urlMatcher.start(0), urlMatcher.end(0)));
-        }
-
-        return containedUrls;
-    }
+		return containedUrls;
+	}
 }
