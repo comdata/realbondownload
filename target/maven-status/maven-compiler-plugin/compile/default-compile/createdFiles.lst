@@ -1,3 +1,5 @@
-cm/homeautomation/realbondownload/MailCheckScheduler.class
+cm/homeautomation/realbondownload/entities/Bon.class
+cm/homeautomation/realbondownload/entities/BonPosition.class
+cm/homeautomation/realbondownload/EntityManagerService.class
 cm/homeautomation/realbondownload/Application.class
-cm/homeautomation/realbondownload/BonPosition.class
+cm/homeautomation/realbondownload/MailCheckScheduler.class
