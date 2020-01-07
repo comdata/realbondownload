@@ -57,14 +57,17 @@ public class Application {
         SpringApplication.run(Application.class, args);
     }
 
+    /**
+     * read mails from server
+     * 
+     */
     public void readMails(String mailServer, String mailAddress, String password) {
         Properties props = new Properties();
         try {
-            // props.load(new FileInputStream(new File("C:\\smtp.properties")));
             Session session = Session.getDefaultInstance(props, null);
 
             Store store = session.getStore("imaps");
-            store.connect("smtp.gmail.com", mailAddress, password);
+            store.connect(mailServer, mailAddress, password);
 
             Folder inbox = store.getFolder("inbox");
             inbox.open(Folder.READ_ONLY);
@@ -78,7 +81,6 @@ public class Application {
             Date latestReceivedDate = new Date(currentDate.getTime()- 14*86400*1000);
 
             Message[] messages = inbox.getMessages();
-            System.out.println("------------------------------");
             for (int i = 1; i < 100; i++) {
                 Message message = messages[messages.length - i];
                 String messageFrom = message.getFrom()[0].toString();
@@ -94,7 +96,7 @@ public class Application {
                         List<Bon> bonList = em.createQuery("select b from Bon b where b.messageId=:messageId", Bon.class)
                                 .setParameter("messageId", messageId).getResultList();
 
-                        System.out.println("Mail : " + messageFrom + "- " + messageSubject + " - " + messageId);
+                        //System.out.println("Mail : " + messageFrom + "- " + messageSubject + " - " + messageId);
 
                         if (bonList == null || bonList.isEmpty()) {
 
@@ -120,6 +122,10 @@ public class Application {
         }
     }
 
+    /**
+     * filter relevant URLs
+     * 
+     */
     public List<String> urlFilterFinder(String message) {
         List<String> urls = urlFinder(message);
         List<String> filteredUrls = new ArrayList<>();
@@ -127,8 +133,6 @@ public class Application {
         for (String url : urls) {
 
             if (url.startsWith("https://trxmail1.payback.de/go")) {
-                // System.out.println("-- "+url+" --");
-
                 filteredUrls.add(url);
             }
         }
@@ -136,6 +140,9 @@ public class Application {
 
     }
 
+    /**
+     * 
+     */
     private String getTextFromMimeMultipart(MimeMultipart mimeMultipart) throws MessagingException, IOException {
         String result = "";
         int count = mimeMultipart.getCount();
@@ -143,14 +150,10 @@ public class Application {
             System.out.println("part: " + i);
             BodyPart bodyPart = mimeMultipart.getBodyPart(i);
             if (bodyPart.isMimeType("text/plain")) {
-                // System.out.println("part: "+bodyPart.getContent());
                 result = result + "\n" + bodyPart.getContent();
-                // break; // without break same text appears twice in my tests
             } else if (bodyPart.isMimeType("text/html")) {
                 String html = (String) bodyPart.getContent();
-                // System.out.println("part: "+html);
                 String plainHtml = org.jsoup.Jsoup.parse(html).text();
-                // System.out.println(plainHtml);
                 result = result + "\n" + html;
             } else if (bodyPart.getContent() instanceof MimeMultipart) {
                 result = result + getTextFromMimeMultipart((MimeMultipart) bodyPart.getContent());
@@ -159,6 +162,9 @@ public class Application {
         return result;
     }
 
+    /**
+     * 
+     */
     private String getTextFromMessage(Message message) throws MessagingException, IOException {
         String result = "";
         if (message.isMimeType("text/plain")) {
@@ -167,34 +173,39 @@ public class Application {
             MimeMultipart mimeMultipart = (MimeMultipart) message.getContent();
             result = getTextFromMimeMultipart(mimeMultipart);
         }
-        // System.out.println("part: "+result);
         return result;
     }
 
+    /**
+     * entry point for application
+     */
     @Bean
     public CommandLineRunner commandLineRunner(ApplicationContext ctx) {
         return args -> {
-
             mailServer = args[0];
             mailAddress = args[1];
             mailPassword = args[2];
-
-            // System.out.println("done parsing");
         };
     }
 
+    /**
+     * external check call entry point
+     * 
+     */
     public void checkMails() {
         readMails(mailServer, mailAddress, mailPassword);
     }
 
+    /**
+     * fetch BON for single mail entry
+     * 
+     */
     private void fetchBon(String bonInitialUrl, String messageId) throws ParseException {
 
         EntityManager em = EntityManagerService.getNewManager();
         em.getTransaction().begin();
 
         String url = bonInitialUrl;
-
-        System.out.println(url);
 
         MultiValueMap<String, String> headers = new LinkedMultiValueMap<String, String>();
         Map map = new HashMap<String, String>();
@@ -217,38 +228,23 @@ public class Application {
 
         newLocation = newLocation.replace("https://www.payback.de/pb/ebon?t=", "").split("&")[0];
 
-        // System.out.println("new location: " + newLocation);
-        // System.out.println("===================================");
         ResponseEntity<String> newResponse = restTemplate.postForEntity(newLocation, request, String.class);
-
-        // System.out.println(response);
-        // System.out.println("===================================");
-        // System.out.println(newResponse);
-        // System.out.println("===================================");
 
         String bonLocation1 = newResponse.getHeaders().get("Location").get(0);
 
         ResponseEntity<String> bonResponse1 = restTemplate.postForEntity(bonLocation1, request, String.class);
 
-        // System.out.println("BON RESPOONSE 1 ===================================");
-        // System.out.println(bonResponse1);
-        // System.out.println("===================================");
-
         String bonLocation2 = urlFinder(bonResponse1.getBody().toString()).get(0).replaceAll("&amp;", "&")
                 .replaceAll("%25253D", "=").replaceAll("%252526", "&").replaceAll("http://", "https://");
-        // System.out.println("BON URL 2 ===================================");
-        // System.out.println(bonLocation2);
 
         ResponseEntity<String> bonResponse2 = restTemplate.postForEntity(bonLocation2, request, String.class);
 
-        // System.out.println("BON RESPOONSE 2 ===================================");
         System.out.println(bonResponse2.getBody().toString());
-        // System.out.println("===================================");
 
         Document doc = Jsoup.parse(bonResponse2.getBody().toString());
 
         Elements trs = doc.select("table.-striped").select("tbody").select("tr");
-        // System.out.println(trs.size());
+
         List<BonPosition> bonPositionList = new ArrayList<>();
         for (Element tr : trs) {
             BonPosition bonPosition = new BonPosition();
@@ -257,7 +253,6 @@ public class Application {
 
             String name = tds.get(0).text().toString();
             BigDecimal quantity = new BigDecimal(tds.get(1).text().toString());
-            // System.out.println("BigDecimal: "+tds.get(2).text().toString());
             BigDecimal price = new BigDecimal(tds.get(2).text().toString().replace(",", "."));
 
             System.out.println(name + " - " + quantity + " - " + price);
@@ -304,18 +299,11 @@ public class Application {
 
         em.persist(bon);
         em.getTransaction().commit();
-
-        /*
-         * <div class="col-sm-6"> <ul class="list -unstyled"> <li> <h4> Summe (inkl.
-         * aller Rabatte):<span class="float-right"> 89,15 &euro;</span> </h4> </li>
-         * 
-         * <li> PAYBACK Punkte auf diesen Einkauf: <span class="float-right"> 44 °P
-         * </span> </li> <li> PAYBACK Sonderpunkte: <span class="float-right"> 0 °P
-         * </span> </li> </ul>
-         * 
-         */
     }
 
+    /**
+     * find URLs
+     */
     public List<String> urlFinder(String text) {
         List<String> containedUrls = new ArrayList<String>();
         String urlRegex = "((https?|ftp|gopher|telnet|file):((//)|(\\\\))+[\\w\\d:#@%/;$()~_?\\+-=\\\\\\.&]*)";
@@ -328,5 +316,4 @@ public class Application {
 
         return containedUrls;
     }
-
 }
