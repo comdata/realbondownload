@@ -254,7 +254,7 @@ public class Application {
 			BigDecimal quantity = new BigDecimal(tds.get(1).text().toString());
 			BigDecimal price = new BigDecimal(tds.get(2).text().toString().replace(",", "."));
 
-			System.out.println(name + " - " + quantity + " - " + price);
+			log.debug(name + " - " + quantity + " - " + price);
 
 			bonPosition.setName(name);
 			bonPosition.setQuantity(quantity);
