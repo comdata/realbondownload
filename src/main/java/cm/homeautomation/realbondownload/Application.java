@@ -92,7 +92,6 @@ public class Application {
         } catch (Exception e) {
             e.printStackTrace();
         }
-
     }
 
     private String getTextFromMimeMultipart(MimeMultipart mimeMultipart) throws MessagingException, IOException {
