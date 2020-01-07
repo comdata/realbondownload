@@ -32,5 +32,8 @@ public class Bon {
 	BigDecimal paybackExtra;
 	
 	@OneToMany(cascade=CascadeType.PERSIST)
-	List<BonPosition> bonPositions;
+    List<BonPosition> bonPositions;
+    
+    @Column(unique=true)
+    String messageId;
 }
