@@ -6,8 +6,8 @@ pipeline {
 
     agent {
         docker {
-            image 'maven:3.6.1-jdk-8-alpine' 
-            args '-v $HOME/.m2:/root/.m2 -v /root/.ssh:/root/.ssh -v /run/docker.sock:/run/docker.sock -v /usr/bin/docker:/usr/bin/docker' 
+            image 'maven:3.6.3-slim' 
+            args '-v $HOME/.m2:/root/.m2 -v /root/.ssh:/root/.ssh -v /run/docker.sock:/run/docker.sock' 
         }
     }
 
@@ -20,10 +20,8 @@ pipeline {
 
         stage('Prepare') {
  		    steps {
-			    sh 'apk update'
-                sh 'ls -lsa /usr/bin/docker'
-                sh '/usr/bin/docker'
-			    //sh 'apk add docker'
+			    sh 'apt-get update'
+			    sh 'apt-get install -y docker'
             }
         }
 
@@ -34,7 +32,6 @@ pipeline {
         }*/
         
         stage('Make Container') {
-
 
             steps {
                 script {
