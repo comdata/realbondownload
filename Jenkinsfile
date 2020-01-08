@@ -6,7 +6,7 @@ pipeline {
 
     agent {
         docker {
-            image 'maven:3.6.3-slim' 
+            image 'comdata456/maven-jdk-11-slim' 
             args '-v $HOME/.m2:/root/.m2 -v /root/.ssh:/root/.ssh -v /run/docker.sock:/run/docker.sock' 
         }
     }
@@ -18,12 +18,12 @@ pipeline {
 
     stages {
 
-        stage('Prepare') {
- 		    steps {
-			    sh 'apt-get update'
-			    sh 'apt-get install -y docker'
-            }
-        }
+        //stage('Prepare') {
+ 		//    steps {
+		//	    sh 'apt-get update'
+		//	    sh 'apt-get install -y docker'
+        //    }
+        //}
 
 /*        stage('Build') {
             steps {
