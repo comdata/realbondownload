@@ -7,7 +7,7 @@ pipeline {
     agent {
         docker {
             image 'maven:3.6.1-jdk-8-alpine' 
-            args '-v $HOME/.m2:/root/.m2 -v /root/.ssh:/root/.ssh -v /run/docker.sock:/run/docker.sock -v /var/jenkins_home/tools/org.jenkinsci.plugins.docker.commons.tools.DockerTool/Docker_latest/bin/docker:/usr/bin/docker' 
+            args '-v $HOME/.m2:/root/.m2 -v /root/.ssh:/root/.ssh -v /run/docker.sock:/run/docker.sock -v /usr/bin/docker:/usr/bin/docker' 
         }
     }
 
@@ -22,6 +22,7 @@ pipeline {
  		    steps {
 			    sh 'apk update'
                 sh 'ls -lsa /usr/bin/docker'
+                sh '/usr/bin/docker'
 			    //sh 'apk add docker'
             }
         }
