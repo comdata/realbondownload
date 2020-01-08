@@ -1,4 +1,7 @@
 pipeline {
+    registry = "comdata456/realbondownload"
+    registryCredential = 'docker-hub-credentials'
+
     agent {
         docker {
             image 'maven:3.6.1-jdk-8-alpine' 
@@ -18,35 +21,41 @@ pipeline {
 			    sh 'apk update'
                 sh 'ls /usr/bin/docker'
 			    //sh 'apk add docker'
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh 'mvn package'
+            }
+        }
+        
+        stage('Make Container') {
+
+
+            steps {
+                script {
+                    docker.build registry + ":$BUILD_NUMBER"
+                }
+
+                //sh "docker build -t comdata456/realbondownload:${env.BUILD_ID} ."
+                //sh "docker tag comdata456/realbondownload:${env.BUILD_ID} comdata456/realbondownload:latest"
+            }
         }
     }
 
-    stage('Build') {
-      steps {
-        sh 'mvn package'
-      }
+    post {
+        always {
+            archive 'target/**/*.jar'
+            junit 'target/**/*.xml'
+            //cucumber '**/*.json'
+        }
+        success {
+            withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+                sh "/usr/bin/docker login -u ${USERNAME} -p ${PASSWORD}"
+                sh "/usr/bin/docker push comdata456/realbondownload:${env.BUILD_ID}"
+                sh "/usr/bin/docker push comdata456/realbondownload:latest"
+            }
+        }
     }
-    
-    stage('Make Container') {
-      steps {
-      sh "docker build -t comdata456/realbondownload:${env.BUILD_ID} ."
-      sh "docker tag comdata456/realbondownload:${env.BUILD_ID} comdata456/realbondownload:latest"
-      }
-    }
-  }
-
-  post {
-    always {
-      archive 'target/**/*.jar'
-      junit 'target/**/*.xml'
-      //cucumber '**/*.json'
-    }
-    success {
-      withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
-        sh "/usr/bin/docker login -u ${USERNAME} -p ${PASSWORD}"
-        sh "/usr/bin/docker push comdata456/realbondownload:${env.BUILD_ID}"
-        sh "/usr/bin/docker push comdata456/realbondownload:latest"
-      }
-    }
-  }
 }
