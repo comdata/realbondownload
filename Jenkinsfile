@@ -21,7 +21,7 @@ pipeline {
         stage('Prepare') {
  		    steps {
 			    sh 'apk update'
-                sh 'ls /usr/bin/docker'
+                sh 'ls -lsa /usr/bin/docker'
 			    //sh 'apk add docker'
             }
         }
