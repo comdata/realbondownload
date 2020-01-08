@@ -11,33 +11,20 @@ pipeline {
         }
     }
 
-/*  tools {
-    maven 'Maven 3.6.2'
-  }*/
 
 
     stages {
 
-        //stage('Prepare') {
- 		//    steps {
-		//	    sh 'apt-get update'
-		//	    sh 'apt-get install -y docker'
-        //    }
-        //}
 
-/*        stage('Build') {
+        stage('Build') {
             steps {
                 sh 'mvn package'
             }
-        }*/
+        }
         
         stage('Make Container') {
 
             steps {
-/*                script {
-                    docker.build registry + ":$BUILD_NUMBER"
-                }*/
-
                 sh "docker build -t comdata456/realbondownload:${env.BUILD_ID} ."
                 sh "docker tag comdata456/realbondownload:${env.BUILD_ID} comdata456/realbondownload:latest"
             }
