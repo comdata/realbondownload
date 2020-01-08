@@ -1,49 +1,44 @@
 pipeline {
-    agent {
-        docker {
-            image 'maven:3.6.1-jdk-8-alpine' 
-            args '-v $HOME/.m2:/root/.m2 -v /root/.ssh:/root/.ssh' 
-        }
+  agent any
+
+  tools {
+    maven 'mvn-3.5.2'
+  }
+
+  stages {
+    stage('Build') {
+      steps {
+        sh 'mvn package'
+      }
     }
     
-    stages {
-	
-
-//        stage('Clone repository') {
-            /* Let's make sure we have the repository cloned to our workspace */
-
-//            checkout scm
-//        }
-
-        stage('Compile app') {
-            steps {
-            withMaven() {
-                sh '$MVN_CMD -T 1C -B package'
-            }
-            }
-        }
-
-        stage('Build image') {
-            /* This builds the actual image; synonymous to
-            * docker build on the command line */
-steps {
-             docker.build("comdata456/realbondownload")
-}
-        }
-
-
-        stage('Push image') {
-            /* Finally, we'll push the image with two tags:
-            * First, the incremental build number from Jenkins
-            * Second, the 'latest' tag.
-            * Pushing multiple tags is cheap, as all the layers are reused. */
-        steps {
-
-            docker.withRegistry('https://registry.hub.docker.com', 'docker-hub-credentials') {
-                app.push("${env.BUILD_NUMBER}")
-                app.push("latest")
-            }
-        }
-        }
+    stage('Make Container') {
+      steps {
+      sh "docker build -t comdata456/realbondownload:${env.BUILD_ID} ."
+      sh "docker tag comdata456/realbondownload:${env.BUILD_ID} comdata456/realbondownload:latest"
+      }
     }
+    
+    stage('Check Specification') {
+      steps {
+        sh "chmod o+w *"
+        sh "docker-compose up --exit-code-from cucumber --build"
+      }
+    }
+  }
+
+  post {
+    always {
+      archive 'target/**/*.jar'
+      junit 'target/**/*.xml'
+      cucumber '**/*.json'
+    }
+    success {
+      withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+        sh "docker login -u ${USERNAME} -p ${PASSWORD}"
+        sh "docker push comdata456/realbondownload:${env.BUILD_ID}"
+        sh "docker push comdata456/realbondownload:latest"
+      }
+    }
+  }
 }
