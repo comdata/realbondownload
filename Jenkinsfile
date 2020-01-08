@@ -16,7 +16,7 @@ pipeline {
         stage('Prepare') {
  		    steps {
 			    sh 'apk update'
-			    sh 'apk add docker'
+			    //sh 'apk add docker'
         }
     }
 
