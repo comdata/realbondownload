@@ -10,14 +10,16 @@ pipeline {
     maven 'Maven 3.6.2'
   }*/
 
-  stage('Prepare') {
-		steps {
-			sh 'apk update'
-			sh 'apk add docker'
-        }
-  }
 
-  stages {
+    stages {
+
+        stage('Prepare') {
+ 		    steps {
+			    sh 'apk update'
+			    sh 'apk add docker'
+        }
+    }
+
     stage('Build') {
       steps {
         sh 'mvn package'
