@@ -1,6 +1,8 @@
 pipeline {
-    registry = "comdata456/realbondownload"
-    registryCredential = 'docker-hub-credentials'
+    environment {
+        registry = "comdata456/realbondownload"
+        registryCredential = 'docker-hub-credentials'
+    }
 
     agent {
         docker {
