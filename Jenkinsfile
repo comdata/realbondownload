@@ -33,9 +33,7 @@ pipeline {
 
     post {
         always {
-            archive 'target/**/*.jar'
-            //junit 'target/**/*.xml'
-            //cucumber '**/*.json'
+            archiveArtifacts artifacts: 'target/**/*.jar', fingerprint: true
         }
         success {
             withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
