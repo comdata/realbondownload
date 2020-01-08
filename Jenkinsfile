@@ -16,6 +16,7 @@ pipeline {
         stage('Prepare') {
  		    steps {
 			    sh 'apk update'
+                sh 'ls /usr/bin/docker'
 			    //sh 'apk add docker'
         }
     }
@@ -28,8 +29,8 @@ pipeline {
     
     stage('Make Container') {
       steps {
-      sh "/usr/bin/docker build -t comdata456/realbondownload:${env.BUILD_ID} ."
-      sh "/usr/bin/docker tag comdata456/realbondownload:${env.BUILD_ID} comdata456/realbondownload:latest"
+      sh "docker build -t comdata456/realbondownload:${env.BUILD_ID} ."
+      sh "docker tag comdata456/realbondownload:${env.BUILD_ID} comdata456/realbondownload:latest"
       }
     }
   }
