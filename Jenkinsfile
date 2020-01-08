@@ -34,7 +34,7 @@ pipeline {
     post {
         always {
             archive 'target/**/*.jar'
-            junit 'target/**/*.xml'
+            //junit 'target/**/*.xml'
             //cucumber '**/*.json'
         }
         success {
