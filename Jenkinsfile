@@ -2,7 +2,7 @@ pipeline {
     agent {
         docker {
             image 'maven:3.6.1-jdk-8-alpine' 
-            args '-v $HOME/.m2:/root/.m2 -v /root/.ssh:/root/.ssh -v /run/docker.sock:/run/docker.sock' 
+            args '-v $HOME/.m2:/root/.m2 -v /root/.ssh:/root/.ssh -v /run/docker.sock:/run/docker.sock -v /usr/bin/docker:/usr/bin/docker' 
         }
     }
 
@@ -30,13 +30,6 @@ pipeline {
       steps {
       sh "docker build -t comdata456/realbondownload:${env.BUILD_ID} ."
       sh "docker tag comdata456/realbondownload:${env.BUILD_ID} comdata456/realbondownload:latest"
-      }
-    }
-    
-    stage('Check Specification') {
-      steps {
-        sh "chmod o+w *"
-        sh "docker-compose up --exit-code-from cucumber --build"
       }
     }
   }
