@@ -1,8 +1,20 @@
 pipeline {
-  agent any
+    agent {
+        docker {
+            image 'maven:3.6.1-jdk-8-alpine' 
+            args '-v $HOME/.m2:/root/.m2 -v /root/.ssh:/root/.ssh -v /run/docker.sock:/run/docker.sock' 
+        }
+    }
 
-  tools {
+/*  tools {
     maven 'Maven 3.6.2'
+  }*/
+
+  stage('Prepare') {
+		steps {
+			sh 'apk update'
+			sh 'apk add docker'
+        }
   }
 
   stages {
@@ -31,7 +43,7 @@ pipeline {
     always {
       archive 'target/**/*.jar'
       junit 'target/**/*.xml'
-      cucumber '**/*.json'
+      //cucumber '**/*.json'
     }
     success {
       withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
