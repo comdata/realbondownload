@@ -1,10 +1,25 @@
-node {
+pipeline {
+    agent {
+        docker {
+            image 'maven:3.6.1-jdk-8-alpine' 
+            args '-v $HOME/.m2:/root/.m2 -v /root/.ssh:/root/.ssh' 
+        }
+    }
+    
+    stages {
+		
     def app
 
     stage('Clone repository') {
         /* Let's make sure we have the repository cloned to our workspace */
 
         checkout scm
+    }
+
+    stage('Compile app') {
+		withMaven() {
+			sh '$MVN_CMD -T 1C -B package'
+       	}
     }
 
     stage('Build image') {
@@ -32,5 +47,6 @@ node {
             app.push("${env.BUILD_NUMBER}")
             app.push("latest")
         }
+    }
     }
 }
