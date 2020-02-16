@@ -252,7 +252,7 @@ public class Application {
 
 			String name = tds.get(0).text().toString();
 			BigDecimal quantity = new BigDecimal(tds.get(1).text().toString());
-			BigDecimal price = new BigDecimal(tds.get(2).text().toString().replace(",", "."));
+			BigDecimal price = new BigDecimal(tds.get(2).text().toString().split(" ")[0].replace(",", "."));
 
 			log.debug(name + " - " + quantity + " - " + price);
 
