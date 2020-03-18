@@ -25,8 +25,8 @@ pipeline {
         stage('Make Container') {
 
             steps {
-                sh "docker build -t comdata456/realbondownload:${env.BUILD_ID} ."
-                sh "docker tag comdata456/realbondownload:${env.BUILD_ID} comdata456/realbondownload:latest"
+                sh "/usr/bin/docker build -t comdata456/realbondownload:${env.BUILD_ID} ."
+                sh "/usr/bin/docker tag comdata456/realbondownload:${env.BUILD_ID} comdata456/realbondownload:latest"
             }
         }
     }
